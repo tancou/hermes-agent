@@ -8,13 +8,15 @@ import sys
 import pytest
 
 
-def test_realtime_tools_use_the_canonical_gateway_turn(tmp_path):
+@pytest.mark.parametrize("profile,trusted", [("default", False), ("devops", False), ("devops", True)])
+def test_realtime_tools_use_the_canonical_gateway_turn(tmp_path, profile, trusted):
     root = Path(__file__).resolve().parents[2]
     home = tmp_path / 'profile'
     home.mkdir()
     env = {k: os.environ[k] for k in ('PATH', 'LANG', 'TZ', 'SYSTEMROOT') if k in os.environ}
     env.update(HERMES_HOME=str(home), PYTHONPATH=str(root), PYTHONUNBUFFERED='1')
-    result = subprocess.run([sys.executable, str(Path(__file__).parent / 'fixtures/realtime_execution_peer.py')],
+    result = subprocess.run([sys.executable, str(Path(__file__).parent / 'fixtures/realtime_execution_peer.py'),
+                             profile, 'trusted' if trusted else 'strict'],
                             cwd=root, env=env, capture_output=True, text=True, timeout=80, check=False)
     assert result.returncode == 0, result.stdout + '\n' + result.stderr
     receipt = json.loads((home / 'duplex-receipt.json').read_text())

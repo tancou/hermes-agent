@@ -1523,7 +1523,7 @@ DEFAULT_CONFIG = {
     },
 
     "discord": {
-        "voice_operator_only": True, "voice_engine": "realtime",  # duplex; False admits authorized room members
+        "voice_operator_only": True, "voice_engine": "realtime", "voice_trusted_room": False,
         "require_mention": True,  # require @mention to respond in server channels
         "free_response_channels": "",  # comma-separated channel IDs answered without mention
         "allowed_channels": "",  # if set, ONLY respond in these channel IDs (whitelist)

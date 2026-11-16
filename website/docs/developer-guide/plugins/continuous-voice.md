@@ -24,7 +24,8 @@ outputs. `note_response(response_id, user_id, text, has_tools=False,
 input_item_id=...)` closes the corresponding native turn. `close()` revokes the
 attachment. Audio processing must run independently of those awaited tool tasks.
 
-Execution enters ordinary gateway admission and TurnRunner, then supplies the
+Execution re-enters the receiving adapter’s registered message callback, which
+establishes native provenance for the new event, then ordinary gateway admission and TurnRunner, then supplies the
 external model completion to the normal agent loop. Tool checks, approvals, skill
 hooks, conversation persistence and child-agent execution remain canonical. The
 completion binding belongs only to the parent agent; children retain their own
@@ -39,6 +40,18 @@ it does not undo running tools. Provider continuations wait at most 180 seconds.
 Live capabilities are not replayable: a durable admission left after restart fails
 closed if its in-memory voice binding expired. A rejoin is required. The initial
 history snapshot is bounded and does not continuously synchronize other writers.
+
+### Optional trusted owner room
+
+`discord.voice_trusted_room: true` exposes `attachment.trusted_room` to the consumer.
+The consumer attributes room audio to `attachment.operator_user_id`, including
+mixed/unresolved speaker audio, and omits spoken-permit expiry. The live receiving
+connection, operator and runtime profile remain bound. Default false preserves
+per-speaker attribution. `attachment.approvals_disabled` reports whether the
+profile's existing `approvals.mode` is off; that setting controls canonical approval
+gates, rather than introducing a second executor or an approval policy in Talk.
+The consumer should explain unconfirmed tool execution without ending audio or
+claiming that an uncertain operation had no effects.
 
 ## Continuous transcription ingress
 

@@ -125,7 +125,9 @@ class VoiceTurn:
                 event = MessageEvent(text=self.text or '[Voice input]', source=self.source,
                                      message_id=self.message_id, allow_gateway_control=False,
                                      reply_expected=False)
-                await self.attachment.factory.runner._handle_message(event)
+                # Re-enter the receiving adapter callback: it establishes fresh native
+                # provenance for THIS event, including multiplexed profile ownership.
+                await self.attachment.factory.adapter._message_handler(event)
                 if self.result is None:
                     raise RuntimeError('Hermes did not execute the admitted voice turn')
         finally:
@@ -147,6 +149,8 @@ class RealtimeExecutionAttachment:
         self.operator_user_id = factory.operator_user_id
         self.loop = asyncio.get_running_loop()
         self.closed = False
+        self.trusted_room = False
+        self.approvals_disabled = False
         self._definitions = []
         self._history = []
         self._permits = {}
@@ -160,7 +164,14 @@ class RealtimeExecutionAttachment:
         self.check(self.operator_user_id)
         def discover():
             import model_tools
+            from hermes_cli.config_effective import load_user_config_effective
             with self.factory.scope():
+                trusted = load_user_config_effective(fail_closed=True).get("discord", {}).get("voice_trusted_room", False)
+                if type(trusted) is not bool:
+                    raise ValueError("discord.voice_trusted_room must be a boolean")
+                self.trusted_room = trusted
+                from tools.approval_context import _get_approval_mode
+                self.approvals_disabled = _get_approval_mode() == "off"
                 display = self.factory.runner._run_agent_display_settings(self.factory.source)
                 definitions = model_tools.get_tool_definitions(enabled_toolsets=display.enabled_toolsets,
                     disabled_toolsets=display.disabled_toolsets, quiet_mode=True)
