@@ -31,7 +31,11 @@ hooks, conversation persistence and child-agent execution remain canonical. The
 completion binding belongs only to the parent agent; children retain their own
 model. No raw dispatcher and no second inference to reinterpret the tool request
 are used. Native streaming/text delivery and TTS acknowledgements are suppressed
-for these audio-owned turns. The first implementation requires the host agent's
+for these audio-owned turns. While the Realtime attachment is open, automatic
+TTS (final attachments, voice-input fallback, streaming and acknowledgements) is
+also suspended for its linked text chat on that receiving adapter. Other chats
+and bots retain their policy. Closing the attachment restores the existing chat
+settings without rewriting `/voice` preferences. The first implementation requires the host agent's
 `chat_completions` protocol and refuses other protocols.
 
 A native turn waits up to 30 seconds for its exact final input transcript before

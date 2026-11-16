@@ -2028,14 +2028,14 @@ class BasePlatformAdapter(ABC):
     fatal_error_retryable = property(lambda self: self._fatal_error_retryable)
 
     def _should_auto_tts_for_chat(self, chat_id: str) -> bool:
-        """Whether auto-TTS fires for ``chat_id``: explicit ``/voice on|tts`` wins,
+        """Unless Realtime owns audio for ``chat_id``, explicit ``/voice on|tts`` wins,
         then explicit ``/voice off``, then the global ``voice.auto_tts`` default.
 
         Decision layers (Issue #16007): 1. Explicit ``/voice on`` or ``/voice tts`` → always fire (even if
         ``voice.auto_tts`` is False). 2. 3.
         """
-        return chat_id in self._auto_tts_enabled_chats or (
-            chat_id not in self._auto_tts_disabled_chats and bool(self._auto_tts_default))
+        from gateway.voice_output_policy import auto_tts_enabled
+        return auto_tts_enabled(self, chat_id)
 
     def set_fatal_error_handler(self, handler: "Callable[[BasePlatformAdapter], Awaitable[None] | None]") -> None:
         self._fatal_error_handler = handler

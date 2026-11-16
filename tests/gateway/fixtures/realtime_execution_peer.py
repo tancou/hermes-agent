@@ -27,6 +27,7 @@ async def main():
             self._is_allowed_user = lambda user, **_: user == '42'
             self.sent = []
             self.acks = []
+            self._auto_tts_default = True
             self.voice_mixer_active = lambda _: True
 
         async def play_ack_in_voice(self, guild_id):
@@ -79,6 +80,11 @@ async def main():
                            profile=None if profile == 'default' else profile)
     source._transport_adapter_ref = weakref.ref(adapter)
     source._authorization_profile_home = home
+    tts_replies = []
+    async def record_tts(event, response):
+        tts_replies.append(response)
+    runner._send_voice_reply = record_tts
+    runner._voice_mode[runner._voice_key_for_source(source)] = 'all'
     invocation = PluginVoiceInvocation(runner, source)
     with runner._profile_scope_for_source(source):
         attachment = await invocation.capture_realtime_execution_attachment()
@@ -133,6 +139,8 @@ async def main():
         assert any(m.get('role') == 'tool' and m.get('tool_call_id') == 'call-1' for m in messages), messages
         assert messages[-1]['content'] == 'The output is native-duplex.', messages[-1]
         assert adapter.acks == [], 'Native TTS must not overlap Realtime audio'
+        assert tts_replies == [], 'No automatic TTS attachments while Realtime owns audio'
+        assert not adapter._should_auto_tts_for_chat('700')
         from gateway.session_authorities import active_authority
         entry = runner.session_store.get_or_create_session(source)
         admissions = list_session_admissions(active_authority(runner).db, session_id=entry.session_id, pending_only=False)
@@ -144,6 +152,7 @@ async def main():
         else:
             raise AssertionError('Repeated permit executed')
         attachment.close()
+        assert adapter._should_auto_tts_for_chat('700'), 'Restore original TTS policy after leaving'
         resumed = await invocation.capture_realtime_execution_attachment()
         assert resumed.initial_history()[-1] == {'role': 'assistant', 'content': 'The output is native-duplex.'}
         resumed.close()
