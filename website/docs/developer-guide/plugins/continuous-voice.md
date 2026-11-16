@@ -1,4 +1,46 @@
-# Continuous voice ingress for Discord
+# Discord voice: Realtime execution and continuous transcription
+
+
+## Realtime model with canonical execution
+
+`PluginVoiceInvocation.realtime_execution_version == 1` advertises the live
+`await invocation.capture_realtime_execution_attachment()` capability. Capture
+must occur during the authorized Discord command. The attachment binds the exact
+adapter, connection, room, text conversation, operator and profile; the same speaker
+policy below applies. `discord.voice_engine` defaults to `realtime`; `transcription`
+selects the separate ingress described below.
+
+The provider retains duplex audio and barge-in. The attachment exposes canonical
+`tool_definitions()` and bounded `initial_history()` (user/assistant text only,
+20 messages/16k characters). History must be replayed as conversation data, never
+system instructions. Final input is reported using `note_input(user_id, text,
+input_item_id=...)`. A trusted PCM/VAD ledger must bind every response and function
+call to that exact Discord speaker and input item, including continuations.
+
+`mint_tool_call_permit(response_id=..., item_id=..., call_id=..., batch_id=...,
+tool_name=..., arguments=..., speaker_user_id=..., input_item_id=...)` returns a
+single-use opaque permit. `await execute_tool_batch(permits)` returns exact tool
+outputs. `note_response(response_id, user_id, text, has_tools=False,
+input_item_id=...)` closes the corresponding native turn. `close()` revokes the
+attachment. Audio processing must run independently of those awaited tool tasks.
+
+Execution enters ordinary gateway admission and TurnRunner, then supplies the
+external model completion to the normal agent loop. Tool checks, approvals, skill
+hooks, conversation persistence and child-agent execution remain canonical. The
+completion binding belongs only to the parent agent; children retain their own
+model. No raw dispatcher and no second inference to reinterpret the tool request
+are used. Native streaming/text delivery and TTS acknowledgements are suppressed
+for these audio-owned turns. The first implementation requires the host agent's
+`chat_completions` protocol and refuses other protocols.
+
+A native turn waits up to 30 seconds for its exact final input transcript before
+execution. New speech closes the earlier response with an interruption marker;
+it does not undo running tools. Provider continuations wait at most 180 seconds.
+Live capabilities are not replayable: a durable admission left after restart fails
+closed if its in-memory voice binding expired. A rejoin is required. The initial
+history snapshot is bounded and does not continuously synchronize other writers.
+
+## Continuous transcription ingress
 
 This extension lets a plugin transport live speech into the existing Discord
 conversation. Hermes Talk is the first consumer. It uses the existing

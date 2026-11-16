@@ -208,10 +208,13 @@ class GatewayVoiceMixin:
             adapter._voice_input_callback = None
         return t("gateway.voice.channel_left")
 
-    def _voice_ack_guild_for(self, source: SessionSource) -> Optional[int]:
+    def _voice_ack_guild_for(self, source: SessionSource, turn_params=None) -> Optional[int]:
         """Guild whose voice call is bound to *source*'s text channel on the bot that ANSWERS it.
         Under multiplexing a secondary profile's call lives on its own adapter, never the default's
         (#139345): reading ``self.adapters`` would miss its call or borrow the primary bot's."""
+        from gateway.realtime_execution import request_for
+        if request_for((turn_params or {}).get('inbound_message_id')) is not None:
+            return None  # Realtime owns audio; a native TTS acknowledgement would overlap it.
         if source.platform != Platform.DISCORD:
             return None
         adapter = self._delivery_adapter_for(source)

@@ -10,15 +10,31 @@ class PluginVoiceInvocation:
     """Short-lived command context. Factories captured during it may outlive it."""
 
     transcription_ingress_version = 1
+    realtime_execution_version = 1
 
     def __init__(self, runner, source):
         self.runner, self.source = runner, replace_source(source)
         self.active = True
 
+    @property
+    def realtime_voice_default(self):
+        from hermes_cli.config_effective import load_user_config_effective
+        with self.runner._profile_scope_for_source(self.source):
+            engine = load_user_config_effective(fail_closed=True).get('discord', {}).get('voice_engine', 'realtime')
+        if engine not in {'realtime', 'transcription'}:
+            raise ValueError('discord.voice_engine must be realtime or transcription')
+        return engine == 'realtime'
+
     def capture_realtime_voice_attachment_factory(self):
         if not self.active:
             raise RuntimeError("Command invocation has expired")
         return VoiceIngressFactory(self.runner, self.source)
+
+    async def capture_realtime_execution_attachment(self):
+        if not self.active:
+            raise RuntimeError("Command invocation has expired")
+        from gateway.realtime_execution import RealtimeExecutionAttachment
+        return await RealtimeExecutionAttachment(VoiceIngressFactory(self.runner, self.source)).prepare()
 
     def authorize_realtime_voice_control(self, *, guild_id):
         source = self.source
