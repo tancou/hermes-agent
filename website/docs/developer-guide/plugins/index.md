@@ -2619,6 +2619,10 @@ For STT, point `HERMES_LOCAL_STT_COMMAND` at an argv-tokenized template. It runs
 
 **Full guides:** [TTS custom command providers](../../user-guide/features/tts.md#custom-command-providers) · [STT](../../user-guide/features/tts.md#voice-message-transcription-stt).
 
+For live plugin audio entering the normal Discord agent conversation, see
+[Continuous voice ingress](continuous-voice.md). This optional STT extension keeps
+the gateway in charge of sessions, speaker policy, tools, approvals and TTS.
+
 ## Distribute via pip
 
 For sharing plugins publicly, add an entry point to your Python package:

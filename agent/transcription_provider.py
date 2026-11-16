@@ -47,6 +47,19 @@ class TranscriptionProvider(CatalogProviderBase):
         """A single-use live session for one utterance (streaming-capable providers only)."""
         raise NotImplementedError(f"{self.name} does not support live streaming transcription")
 
+    @property
+    def continuous_capable(self) -> bool:
+        """Whether an in-process provider supports continuous, multi-utterance STT."""
+        return False
+
+    async def open_continuous_session(self):
+        """Open an ``agent.continuous_transcription.ContinuousTranscriptionSession``.
+
+        Separate from the existing one-utterance, synchronous streaming API.
+        Live sessions cannot cross ``plugins.isolation: host`` RPC boundaries.
+        """
+        raise NotImplementedError(f"{self.name} does not support continuous transcription")
+
 
 class TranscriptionStreamSession(abc.ABC):
     """Live audio -> transcript for one utterance. ``push_audio`` receives 16 kHz mono s16le PCM in
