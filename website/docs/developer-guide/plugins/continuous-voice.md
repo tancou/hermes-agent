@@ -16,6 +16,10 @@ The provider retains duplex audio and barge-in. The attachment exposes canonical
 system instructions. Final input is reported using `note_input(user_id, text,
 input_item_id=...)`. A trusted PCM/VAD ledger must bind every response and function
 call to that exact Discord speaker and input item, including continuations.
+Report authenticated VAD/commit progression with
+`note_input_started(user_id, input_item_id=...)` before final text. Repeated
+notifications for the same item are idempotent. A late final only completes its
+own input; it cannot interrupt a more recent turn.
 
 `mint_tool_call_permit(response_id=..., item_id=..., call_id=..., batch_id=...,
 tool_name=..., arguments=..., speaker_user_id=..., input_item_id=...)` returns a
@@ -107,6 +111,13 @@ allowlists, role checks, profile routing or normal tool approvals. Malformed
 values refuse startup instead of being interpreted as false. It is read from the
 owning profile's effective configuration at session start, including managed
 overlays; restart the voice session after changing it.
+
+Realtime execution stays in the attachment's runtime profile and tool surface.
+Each speaker's identity is resolved afresh with the receiving bot's provenance.
+A member routed to a different profile is refused before Realtime tool admission;
+that member must start a separate attachment for their profile. The ordinary
+native `profile_mismatch` guard remains active. Continuous STT retains its existing
+per-speaker routing through the native voice callback.
 
 ```yaml
 discord:

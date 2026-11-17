@@ -14,7 +14,6 @@ import time
 import uuid
 
 from gateway.platforms.event import MessageEvent
-from gateway.session_identity import replace_source
 
 logger = logging.getLogger(__name__)
 _PREFIX = 'realtime-voice:'
@@ -55,7 +54,7 @@ class VoiceTurn:
         if text:
             self.input_ready.set()
         self.message_id = _PREFIX + uuid.uuid4().hex
-        self.source = replace_source(attachment.factory.source, user_id=str(user_id))
+        self.source = attachment.check(user_id)
         self.incoming = queue.Queue(maxsize=32)
         self.finished = threading.Event()
         self.result = None
@@ -158,6 +157,7 @@ class RealtimeExecutionAttachment:
         self._turns = {}
         self._inputs = {}
         self._active_inputs = {}
+        self._started_inputs = set()
         self._tasks = set()
 
     async def prepare(self):
@@ -200,6 +200,7 @@ class RealtimeExecutionAttachment:
     def check(self, user_id):
         if self.closed or not self.factory.admits(user_id):
             raise PermissionError('Voice speaker is no longer authorized in this room')
+        return self.factory.realtime_source(user_id)
 
     def initial_history(self):
         self.check(self.operator_user_id)
@@ -210,7 +211,27 @@ class RealtimeExecutionAttachment:
         return deepcopy(self._definitions)
 
     def admits_speaker(self, user_id):
-        return not self.closed and self.factory.admits(user_id)
+        try:
+            self.check(user_id)
+        except PermissionError:
+            return False
+        return True
+
+    def note_input_started(self, user_id, *, input_item_id):
+        """Advance on authenticated VAD/commit order, independently of final text."""
+        self.check(user_id)
+        if not isinstance(input_item_id, str) or not 0 < len(input_item_id) <= 512:
+            raise PermissionError('Missing authenticated voice input identity')
+        key = (user_id, input_item_id)
+        if key in self._started_inputs:
+            return
+        if len(self._started_inputs) >= 4096:
+            raise RuntimeError('Voice history capacity reached; rejoin')
+        self._started_inputs.add(key)
+        previous = self._turns.get(self._active_inputs.get(user_id))
+        if previous is not None and not previous.ended:
+            previous.finish('[Voice response interrupted by new speech.]')
+        self._active_inputs[user_id] = key
 
     def note_input(self, user_id, text, *, input_item_id=None):
         self.check(user_id)
@@ -219,11 +240,6 @@ class RealtimeExecutionAttachment:
         if not isinstance(input_item_id, str) or not 0 < len(input_item_id) <= 512:
             raise PermissionError("Missing authenticated voice input identity")
         key = (user_id, input_item_id)
-        previous_key = self._active_inputs.get(user_id)
-        previous = self._turns.get(previous_key)
-        if previous is not None and previous_key != key and not previous.ended:
-            previous.finish('[Voice response interrupted by new speech.]')
-        self._active_inputs[user_id] = key
         self._inputs[key] = text
         turn = self._turns.get(key)
         if turn is not None:

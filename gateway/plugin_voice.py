@@ -90,6 +90,23 @@ class VoiceIngressFactory:
     def scope(self):
         return self.runner._profile_scope_for_source(self.source)
 
+    def realtime_source(self, user_id):
+        """Re-resolve this speaker without borrowing the joiner's runtime identity."""
+        from gateway.session_identity import canonical_identity, clear_identity
+        source = replace_source(self.source, user_id=str(user_id), user_name=None,
+                                role_authorized=False)
+        clear_identity(source)
+        identity = canonical_identity(source, runner=self.runner, adapter=self.adapter)
+        bound = canonical_identity(self.source, runner=self.runner, adapter=self.adapter)
+        if identity is None or bound is None or identity.runtime_profile != bound.runtime_profile:
+            raise PermissionError('Voice speaker routes outside this attachment profile; rejoin on that profile')
+        channel = self.voice_client.channel
+        if getattr(self.adapter, '_allowed_role_ids', None):
+            source.role_authorized = self.runner._under_authorization_profile(
+                source, lambda: self.adapter._is_allowed_user(
+                    str(user_id), guild=channel.guild, is_dm=False) is True)
+        return source
+
     def admits(self, user_id):
         self.check_binding()
         if type(user_id) is not int or user_id <= 0:
