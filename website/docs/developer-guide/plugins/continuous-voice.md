@@ -21,6 +21,39 @@ Report authenticated VAD/commit progression with
 notifications for the same item are idempotent. A late final only completes its
 own input; it cannot interrupt a more recent turn.
 
+### Committed conversation updates
+
+An attachment with `conversation_sync_version == 1` also publishes a scoped,
+incremental conversation feed. Call `conversation_snapshot()` once when opening
+the provider connection, then `read_conversation_updates()` regularly and before
+every provider response, including tool continuations. These synchronous methods
+may read storage; call them outside the audio event loop. The feed is pinned to
+the invoking profile and exact native session key (including user/thread isolation).
+A route replacement or compression invalidates it and requires leave/rejoin.
+
+Each batch contains `session_id`, an integer `cursor`, `messages` and `has_more`.
+Each message retains its database `message_id`, stable `event_id`, `session_id`,
+`origin`, replay `role` and `content`. Internal notifications and external tool
+results have `origin: internal` and replay as assistant **data**, never user or
+system instructions. The consumer must label their provenance and treat their
+contents as untrusted result data. External user and assistant messages retain
+their roles. This includes Discord text written after the voice connection opened.
+
+After successfully transmitting a batch, call
+`acknowledge_conversation_updates(cursor)`. Until then, reads repeat that exact
+batch; acknowledgements cannot skip unseen rows. Drain `has_more` pages before
+starting a response. Serialize context writes and response creation on the same
+provider connection. This closes the polling race where a completion is already
+stored but the next voice response would otherwise use stale context.
+
+Turns owned by this attachment are excluded from incremental replay: their input,
+tool outputs and speech already travel through Realtime. Stable event identities
+deduplicate repeat reads. A new connection/attachment gets a fresh bounded snapshot
+(20 messages / 16,000 characters), followed by additions after that snapshot.
+There is no durable claim that a spoken announcement was heard across a process
+crash. Storage, provider transmission and speaker playback are separate receipts.
+Do not infer voice delivery from Discord publication or from active-agent lists.
+
 `mint_tool_call_permit(response_id=..., item_id=..., call_id=..., batch_id=...,
 tool_name=..., arguments=..., speaker_user_id=..., input_item_id=...)` returns a
 single-use opaque permit. `await execute_tool_batch(permits)` returns exact tool

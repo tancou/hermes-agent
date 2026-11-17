@@ -142,6 +142,7 @@ class RealtimeExecutionAttachment:
     """Opaque permits and native turn execution for a host-authenticated voice room."""
 
     realtime_execution_version = 1
+    conversation_sync_version = 1
 
     def __init__(self, factory):
         self.factory = factory
@@ -159,6 +160,7 @@ class RealtimeExecutionAttachment:
         self._active_inputs = {}
         self._started_inputs = set()
         self._tasks = set()
+        self._conversation_feed = None
 
     async def prepare(self):
         self.check(self.operator_user_id)
@@ -177,16 +179,10 @@ class RealtimeExecutionAttachment:
                     disabled_toolsets=display.disabled_toolsets, quiet_mode=True)
                 store = self.factory.runner.session_store
                 entry = store.get_or_create_session(self.factory.source, touch_activity=False)
-                history, budget = [], 16000
-                for row in reversed(store.load_transcript(entry.session_id)):
-                    content = row.get('content')
-                    if row.get('role') not in ('user', 'assistant') or not isinstance(content, str) or not content:
-                        continue
-                    if len(history) >= 20 or len(content) > budget:
-                        break
-                    history.append({'role': row['role'], 'content': content})
-                    budget -= len(content)
-                self._history = list(reversed(history))
+                from gateway.voice_conversation_feed import VoiceConversationFeed
+                self._conversation_feed = VoiceConversationFeed(self, entry)
+                self._history = [{'role': m['role'], 'content': m['content']}
+                                 for m in self._conversation_feed.snapshot()['messages']]
                 return [dict(type='function', **d['function']) for d in definitions]
         self._definitions = await asyncio.to_thread(discover)
         slots = getattr(self.factory.adapter, '_continuous_voice_sessions', None)
@@ -200,7 +196,25 @@ class RealtimeExecutionAttachment:
     def check(self, user_id):
         if self.closed or not self.factory.admits(user_id):
             raise PermissionError('Voice speaker is no longer authorized in this room')
-        return self.factory.realtime_source(user_id)
+        source = self.factory.realtime_source(user_id)
+        if self._conversation_feed is not None:
+            with self.factory.scope():
+                key = self.factory.runner.session_store._generate_session_key(source)
+            if key != self._conversation_feed.session_key:
+                raise PermissionError('Voice speaker belongs to another conversation; rejoin there')
+        return source
+
+    def conversation_snapshot(self):
+        self.check(self.operator_user_id)
+        return self._conversation_feed.snapshot()
+
+    def read_conversation_updates(self):
+        self.check(self.operator_user_id)
+        return self._conversation_feed.read()
+
+    def acknowledge_conversation_updates(self, cursor):
+        self.check(self.operator_user_id)
+        self._conversation_feed.acknowledge(cursor)
 
     def initial_history(self):
         self.check(self.operator_user_id)
