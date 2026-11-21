@@ -1523,6 +1523,7 @@ DEFAULT_CONFIG = {
     },
 
     "discord": {
+        "voice_operator_only": True, "voice_engine": "realtime", "voice_trusted_room": False,
         "require_mention": True,  # require @mention to respond in server channels
         "free_response_channels": "",  # comma-separated channel IDs answered without mention
         "allowed_channels": "",  # if set, ONLY respond in these channel IDs (whitelist)
@@ -1534,8 +1535,7 @@ DEFAULT_CONFIG = {
         # Bot authors must type @thisbot to trigger a reply; Discord reply pings alone do not count.
         # Set False only for trusted legacy relays. Humans are unaffected.
         "bots_require_inline_mention": True,
-        # Prepend recent channel scrollback when triggered (recovers messages gated out by
-        # require_mention); limit = max messages scanned.
+        # Backfill scrollback gated out by require_mention; limit = max messages scanned.
         "history_backfill": True,
         "history_backfill_limit": 50,
         # Replay messages missed while offline, after reconnect/startup.

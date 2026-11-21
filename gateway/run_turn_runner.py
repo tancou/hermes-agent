@@ -248,6 +248,9 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
 
     def _setup_stream_consumer(self, platform_key):
         ctx = self._ctx
+        from gateway.realtime_execution import request_for
+        if request_for(ctx.inbound_message_id) is not None:
+            return None, None, None, False
         if ctx.mute_notification_reply:
             return None, None, None, False
         stream_consumer = None
@@ -1061,7 +1064,9 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
                 agent._silence_marker_needs_reply = not silence_allowed(
                     ctx.persist_user_display_kind, ctx.reply_expected)
                 try:
-                    result = agent.run_conversation(api_message, **kwargs)
+                    from gateway.realtime_execution import run_voice_conversation
+                    result = run_voice_conversation(agent, api_message, kwargs,
+                        message_id=ctx.inbound_message_id, source=ctx.source)
                 finally:
                     agent._silence_marker_needs_reply = False
             if captured is not None:

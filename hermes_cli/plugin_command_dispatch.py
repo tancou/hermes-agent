@@ -8,6 +8,15 @@ from typing import Any, Callable
 _KEYWORD_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
 
 
+def accepts_live_invocation(handler: Callable) -> bool:
+    """Live capabilities require an explicit opt-in, never a catch-all/RPC proxy."""
+    try:
+        parameter = inspect.signature(handler).parameters.get("invocation")
+    except (TypeError, ValueError):
+        return False
+    return parameter is not None and parameter.kind in _KEYWORD_KINDS
+
+
 def invoke_plugin_command(handler: Callable, raw_args: str, **context: Any) -> Any:
     """Call *handler* once with *raw_args* plus the *context* keywords it declares.
 

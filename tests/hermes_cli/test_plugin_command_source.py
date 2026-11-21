@@ -1,6 +1,6 @@
 """Plugin slash-command handlers receive only the calling-session context they declare."""
 
-from hermes_cli.plugin_command_dispatch import invoke_plugin_command
+from hermes_cli.plugin_command_dispatch import accepts_live_invocation, invoke_plugin_command
 
 CONTEXT = {"source": "src", "session_id": "sid", "session_key": "key", "platform": "telegram"}
 
@@ -30,3 +30,14 @@ def test_handlers_get_only_the_context_they_declare():
     assert invoke_plugin_command(positional_only, "a", **CONTEXT) == ("a", None)
     assert invoke_plugin_command(first_named_source, "a", **CONTEXT) == ("a", ["platform", "session_id", "session_key"])
     assert invoke_plugin_command(first_positional_only, "a", **CONTEXT) == ("a", "src")
+
+
+def test_live_capabilities_require_explicit_opt_in():
+    def plugin(raw, invocation=None):
+        return invocation
+
+    def proxy(raw, **kwargs):
+        return kwargs
+
+    assert accepts_live_invocation(plugin)
+    assert not accepts_live_invocation(proxy)

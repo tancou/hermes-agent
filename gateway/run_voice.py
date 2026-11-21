@@ -21,6 +21,7 @@ from typing import Dict, List, Optional
 from agent.i18n import t
 from gateway.config import Platform
 from gateway.platforms.base import build_auto_tts_output_path
+from gateway.voice_output_policy import realtime_owns_audio
 from gateway.platforms.event import MessageEvent, MessageType
 from gateway.session import SessionSource
 
@@ -208,13 +209,18 @@ class GatewayVoiceMixin:
             adapter._voice_input_callback = None
         return t("gateway.voice.channel_left")
 
-    def _voice_ack_guild_for(self, source: SessionSource) -> Optional[int]:
+    def _voice_ack_guild_for(self, source: SessionSource, turn_params=None) -> Optional[int]:
         """Guild whose voice call is bound to *source*'s text channel on the bot that ANSWERS it.
         Under multiplexing a secondary profile's call lives on its own adapter, never the default's
         (#139345): reading ``self.adapters`` would miss its call or borrow the primary bot's."""
+        from gateway.realtime_execution import request_for
+        if request_for((turn_params or {}).get('inbound_message_id')) is not None:
+            return None  # Realtime owns audio; a native TTS acknowledgement would overlap it.
         if source.platform != Platform.DISCORD:
             return None
         adapter = self._delivery_adapter_for(source)
+        if realtime_owns_audio(adapter, source.chat_id):
+            return None
         bound = getattr(adapter, "_voice_text_channels", None)
         if not (isinstance(bound, dict) and hasattr(adapter, "voice_mixer_active")):
             return None
@@ -391,6 +397,9 @@ class GatewayVoiceMixin:
         voice_mode = self._voice_mode.get(self._voice_key_for_source(event.source))
         is_voice_input = event.message_type == MessageType.VOICE
         adapter = self._delivery_adapter_for(event.source)
+        from gateway.realtime_execution import request_for
+        if realtime_owns_audio(adapter, chat_id) or request_for(event.message_id) is not None:
+            return False
         adapter_auto_tts = False
         with suppress(Exception):  # adapters without the probe read as False
             adapter_auto_tts = bool(adapter._should_auto_tts_for_chat(chat_id))

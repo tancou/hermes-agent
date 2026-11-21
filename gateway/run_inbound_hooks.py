@@ -282,21 +282,29 @@ class GatewayInboundHooksMixin:
         if session_entry is None:
             _plugin_context.session_key = self._session_key_for_source(source)
         user_args = event.get_command_args().strip() if args is None else args
-        from hermes_cli.plugin_command_dispatch import invoke_plugin_command
+        from hermes_cli.plugin_command_dispatch import accepts_live_invocation, invoke_plugin_command
         from gateway.plugin_messages import bind_live_source
         from gateway.plugin_command_choice import chat_choices
+        from gateway.plugin_voice import PluginVoiceInvocation
+        invocation = (PluginVoiceInvocation(self, source)
+                      if source.platform.value == "discord" and accepts_live_invocation(plugin_handler) else None)
+        live_context = {"invocation": invocation} if invocation is not None else {}
         call = functools.partial(
             invoke_plugin_command, plugin_handler, user_args, source=source,
             session_id=_plugin_context.session_id or "", session_key=_plugin_context.session_key or "",
-            platform=source.platform.value)
+            platform=source.platform.value, **live_context)
         # ctx.post_message from the handler reaches this chat even before its session is stored;
         # ctx.ask_choice asks it with the clarify prompt.
         with (self._session_env_scope(_plugin_context), bind_live_source(source),
               chat_choices(self, source, self._session_key_for_source(source))):
-            if inspect.iscoroutinefunction(plugin_handler):
-                result = await call()
-            else:
-                result = await self._run_in_executor_with_context(call)
-                if inspect.isawaitable(result):
-                    result = await result
+            try:
+                if inspect.iscoroutinefunction(plugin_handler):
+                    result = await call()
+                else:
+                    result = await self._run_in_executor_with_context(call)
+                    if inspect.isawaitable(result):
+                        result = await result
+            finally:
+                if invocation is not None:
+                    invocation.active = False
         return str(result) if result else None
