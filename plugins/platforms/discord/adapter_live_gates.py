@@ -16,7 +16,7 @@ from gateway.platforms._shared import bridge_owns_env, mark_live_gate_baseline, 
 # extra never disagree about which config they came from.
 _LIVE_GATE_EXTRA_KEYS = (
     "allow_from", "allowed_users", "allowed_roles", "allowed_channels", "ignored_channels",
-    "no_thread_channels", "free_response_channels", "allow_all_users", "allow_bots",
+    "no_thread_channels", "free_response_channels", "allow_all_users", "allow_bots", "allowed_voice_channels",
 )
 
 
@@ -56,6 +56,11 @@ class DiscordLiveGatesMixin:
         resolved = getattr(self, "_username_to_id", None) or {}
         entries = {_clean_discord_id(str(entry)) for entry in self._gate_csv_set(raw)}
         return {resolved.get(entry.lower(), entry) for entry in entries if entry}
+
+    def _voice_channel_allowed(self, channel) -> bool:
+        """DISCORD_ALLOWED_VOICE_CHANNELS gate (per-profile): unset allows every voice channel."""
+        allowed = self._gate_csv_set(self._gate_raw("allowed_voice_channels", "DISCORD_ALLOWED_VOICE_CHANNELS"))
+        return not allowed or "*" in allowed or str(channel.id) in allowed
 
     def _get_allowed_roles(self) -> set:
         """This adapter's DISCORD_ALLOWED_ROLES role IDs (per-profile)."""

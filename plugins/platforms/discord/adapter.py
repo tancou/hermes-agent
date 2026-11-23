@@ -556,6 +556,7 @@ def _clean_discord_id(entry: str) -> str:
 _GATE_ENV_KEYS = (
     "DISCORD_ALLOWED_USERS", "DISCORD_ALLOWED_ROLES", "DISCORD_ALLOWED_CHANNELS",
     "DISCORD_IGNORED_CHANNELS", "DISCORD_NO_THREAD_CHANNELS", "DISCORD_FREE_RESPONSE_CHANNELS",
+    "DISCORD_ALLOWED_VOICE_CHANNELS",
     "DISCORD_MISSED_MESSAGE_BACKFILL_CHANNELS", "DISCORD_ALLOW_ALL_USERS", "DISCORD_ALLOW_BOTS",
     "GATEWAY_ALLOW_ALL_USERS", "GATEWAY_ALLOWED_USERS",
 )
@@ -1522,6 +1523,9 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordCommandSyncMixin, DiscordAuth
                 if guild_id not in bot_guild_ids:
                     return
                 if member == adapter_self._client.user:
+                    # A server admin can drag the bot; it does not stay outside the allowlist.
+                    if after.channel is not None and not adapter_self._voice_channel_allowed(after.channel):
+                        await adapter_self.leave_voice_channel(guild_id)
                     return
                 joined = before.channel is None and after.channel is not None
                 left = before.channel is not None and after.channel is None
@@ -3543,6 +3547,9 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordCommandSyncMixin, DiscordAuth
         """Join a voice channel; returns True on success. ``text_channel_id`` stores the
         transcription-routing binding so programmatic joins work without ``/voice join``."""
         if not self._client or not DISCORD_AVAILABLE:
+            return False
+        if not self._voice_channel_allowed(channel):
+            logger.warning("[%s] Refusing voice channel %s: not in DISCORD_ALLOWED_VOICE_CHANNELS", self.name, channel.id)
             return False
         guild_id = channel.guild.id
         async with self._voice_locks.setdefault(guild_id, asyncio.Lock()):
@@ -7017,6 +7024,7 @@ def _apply_yaml_config(yaml_cfg: dict, discord_cfg: dict) -> dict | None:
         seeded_extra["missed_message_backfill"] = dict(backfill_cfg)
     _gate("ignored_channels", "DISCORD_IGNORED_CHANNELS", from_platform_extra=False)
     _gate("allowed_channels", "DISCORD_ALLOWED_CHANNELS", from_platform_extra=False)
+    _gate("allowed_voice_channels", "DISCORD_ALLOWED_VOICE_CHANNELS", from_platform_extra=False)
     _gate("no_thread_channels", "DISCORD_NO_THREAD_CHANNELS", from_platform_extra=False)
     # history_backfill: recover mention-gated channel messages between bot turns.
     if "history_backfill" in discord_cfg:
